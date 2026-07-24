@@ -73,7 +73,7 @@ async def build_sample_map(conn, max_distinct: int = 30) -> dict:
         values = [r[0] for r in await cur.fetchall()]
         if values:
             samples[(table, col)] = ", ".join(f"'{v}'" for v in values)
-    print(f"[DEBUG] sampled {len(samples)} columns: {list(samples.keys())[:5]}")
+    # print(f"[DEBUG] sampled {len(samples)} columns: {list(samples.keys())[:5]}")
     return samples
 
 async def build_schema_description() -> str:
