@@ -4,7 +4,7 @@ Ask questions about a database in plain English. Get back the answer, the SQL th
 
 Built with FastAPI, GPT-4o-mini, and PostgreSQL. Deployed on Railway against the Chinook sample database (a music store: artists, albums, tracks, customers, invoices).
 
-**Live demo:** `https://YOUR-APP.up.railway.app/docs`
+**Live demo:** `https://sql-agent-production-a225.up.railway.app/docs`
 
 ```bash
 curl -X POST https://YOUR-APP.up.railway.app/ask \
