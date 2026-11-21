@@ -9,7 +9,13 @@ from app.agent import answer_question, log_result
 from app.schema import get_schema_description
 from app.db import get_log_conn, get_ro_conn
 from app.validator import validate_sql
-from app.models import AskRequest, AskResponse, QueryLogEntry, QueryLogResponse, ValidateRequest
+from app.models import (
+    AskRequest,
+    AskResponse,
+    QueryLogEntry,
+    QueryLogResponse,
+    ValidateRequest,
+)
 
 # psycopg3 cannot use Windows' default ProactorEventLoop.
 if sys.platform == "win32":
@@ -28,7 +34,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SQL Agent",
     description="Natural-language questions against a PostgreSQL database, "
-                "with a deterministic SELECT-only safety layer.",
+    "with a deterministic SELECT-only safety layer.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -49,6 +55,7 @@ async def health():
         return {"status": "healthy", "database": "reachable"}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unreachable: {exc}")
+
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(request: AskRequest):
@@ -95,16 +102,22 @@ async def queries(limit: int = 50):
 
     entries = [
         QueryLogEntry(
-            id=r[0], created_at=r[1], question=r[2], generated_sql=r[3],
-            outcome=r[4], block_reason=r[5], error_message=r[6],
+            id=r[0],
+            created_at=r[1],
+            question=r[2],
+            generated_sql=r[3],
+            outcome=r[4],
+            block_reason=r[5],
+            error_message=r[6],
         )
         for r in rows
     ]
     return QueryLogResponse(entries=entries, total=total)
 
+
 @app.post("/validate")
 async def validate_only(request: ValidateRequest):
-    """Validation-layer demonstration. Never executes — parses and returns the verdict."""
+    """Validation-only endpoint. Never executes — parses and returns the verdict."""
     verdict = validate_sql(request.sql)
     return {
         "sql": request.sql,
