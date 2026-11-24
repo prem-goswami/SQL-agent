@@ -18,3 +18,12 @@ else:
 LLM_MODEL = "gpt-4o-mini"
 MAX_RETRIES = 2
 STATEMENT_TIMEOUT = "10s"
+
+# Per-request limits
+ROW_CAP = int(os.getenv("ROW_CAP", "100"))                      # rows per /ask page
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "30"))  # per API key
+RATE_LIMIT_WINDOW_SECONDS = float(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+
+# Conversations
+SESSION_TTL_HOURS = float(os.getenv("SESSION_TTL_HOURS", "24"))
+SESSION_CONTEXT_TURNS = int(os.getenv("SESSION_CONTEXT_TURNS", "5"))

@@ -8,8 +8,8 @@ async def get_ro_conn():
     async with await psycopg.AsyncConnection.connect(
         AGENT_RO_DSN, autocommit=True
     ) as conn:
-        await conn.set_read_only(True)
         async with conn.cursor() as cur:
+            await cur.execute("SET default_transaction_read_only = on")
             await cur.execute(
                 sql.SQL("SET statement_timeout = {}").format(
                     sql.Literal(STATEMENT_TIMEOUT)

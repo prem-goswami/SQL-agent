@@ -1,0 +1,11 @@
+{
+  "name": "analyst_brazil_canada",
+  "tables": ["customer", "invoice", "invoice_line", "track", "album", "artist", "genre", "media_type"],
+  "columns": {
+    "customer": {"deny": ["email", "phone", "fax", "address", "postal_code"]}
+  },
+  "rows": {
+    "customer": {"country": ["Brazil", "Canada"]},
+    "invoice": {"billing_country": ["Brazil", "Canada"]}
+  }
+}

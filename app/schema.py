@@ -1,7 +1,10 @@
 from app.db import get_ro_conn
 from psycopg import sql
 
-_schema_cache: str | None = None
+# Tables the service keeps for itself; never described to the model.
+INTERNAL_TABLES = ("query_log", "api_keys", "sessions", "session_turns")
+
+_schema_cache: dict | None = None
 
 # Simplifies wordy PostgreSQL data types into standard short aliases to save prompt tokens
 TYPE_MAP = {
@@ -14,7 +17,7 @@ COLUMNS_SQL = """
 SELECT table_name, column_name, data_type
 FROM information_schema.columns
 WHERE table_schema = 'public'
-  AND table_name != 'query_log'
+  AND table_name <> ALL(%s)
 ORDER BY table_name, ordinal_position;
 """
 
@@ -42,7 +45,7 @@ SAMPLE_TARGETS_SQL = """
 SELECT table_name, column_name
 FROM information_schema.columns
 WHERE table_schema = 'public'
-  AND table_name != 'query_log'
+  AND table_name <> ALL(%s)
   AND data_type IN ('character varying', 'text')
 ORDER BY table_name, ordinal_position;
 """ 
@@ -52,7 +55,7 @@ async def build_sample_map(conn, max_distinct: int = 30) -> dict:
     For each text column: count distinct values. If few enough,
     grab 3 examples. Returns {(table, column): "'USA', 'Canada', 'France'"}
     """
-    cur = await conn.execute(SAMPLE_TARGETS_SQL)
+    cur = await conn.execute(SAMPLE_TARGETS_SQL, (list(INTERNAL_TABLES),))
     targets = await cur.fetchall()
 
     samples = {}
@@ -76,47 +79,64 @@ async def build_sample_map(conn, max_distinct: int = 30) -> dict:
     # print(f"[DEBUG] sampled {len(samples)} columns: {list(samples.keys())[:5]}")
     return samples
 
-async def build_schema_description() -> str:
+async def build_schema() -> dict:
+    """Introspect once: {table: [(column, type_line, fk_target_table | None), ...]}."""
     async with get_ro_conn() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(COLUMNS_SQL)
+            await cur.execute(COLUMNS_SQL, (list(INTERNAL_TABLES),))
             columns = await cur.fetchall()
 
             await cur.execute(FK_SQL)
             fks = await cur.fetchall()
-            
+
             samples = await build_sample_map(conn)
 
-    # (table, column) -> "ref_table.ref_column"
-    fk_map = {
-        (table, col): f"{ref_table}.{ref_col}"
-        for table, col, ref_table, ref_col in fks
-    }
+    # (table, column) -> (ref_table, ref_column)
+    fk_map = {(table, col): (ref_table, ref_col) for table, col, ref_table, ref_col in fks}
 
     # Group columns by table, preserving ordinal order
-    tables: dict[str, list[str]] = {}
+    tables: dict[str, list[tuple]] = {}
     for table, col, raw_dtype in columns:
         dtype = TYPE_MAP.get(raw_dtype, raw_dtype)
         line = f"  {col} ({dtype})"
         ref = fk_map.get((table, col))
         if ref:
-            line += f" -> {ref}"
+            line += f" -> {ref[0]}.{ref[1]}"
         ex = samples.get((table, col))
         if ex:
             line += f"  e.g. {ex}"
-        tables.setdefault(table, []).append(line)
+        tables.setdefault(table, []).append((col, line, ref[0] if ref else None))
+    return tables
 
+
+def render_schema(tables: dict, visible: frozenset[str] | None = None) -> str:
+    """Prompt text for the given tables; foreign keys into hidden tables are left out."""
     blocks = []
-    for table, lines in tables.items():
+    for table, cols in tables.items():
+        if visible is not None and table not in visible:
+            continue
+        lines = []
+        for _col, line, ref_table in cols:
+            if ref_table and visible is not None and ref_table not in visible:
+                line = line.split(" -> ")[0] + ("  e.g." + line.split("  e.g.", 1)[1] if "  e.g." in line else "")
+            lines.append(line)
         blocks.append(f"Table: {table}\n" + "\n".join(lines))
-
     return "\n\n".join(blocks)
 
 
-async def get_schema_description() -> str:
-    """Cached accessor — builds once, reuses thereafter."""
+async def _schema() -> dict:
+    """Cached introspection — built once, reused thereafter."""
     global _schema_cache
     if _schema_cache is None:
-        _schema_cache = await build_schema_description()
+        _schema_cache = await build_schema()
     return _schema_cache
 
+
+async def get_schema_description(visible_tables: frozenset[str] | None = None) -> str:
+    """Schema text for the model, limited to the tables a key may see."""
+    return render_schema(await _schema(), visible_tables)
+
+
+async def get_table_columns() -> dict[str, set[str]]:
+    """{table: {column, ...}} for checking policies against the real schema."""
+    return {table: {c[0] for c in cols} for table, cols in (await _schema()).items()}

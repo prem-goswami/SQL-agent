@@ -1,0 +1,7 @@
+{
+  "name": "support_no_pii",
+  "columns": {
+    "customer": {"deny": ["email", "phone", "fax", "address", "postal_code"]},
+    "employee": {"deny": ["birth_date", "address", "postal_code", "phone", "fax", "email"]}
+  }
+}
